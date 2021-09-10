@@ -132,7 +132,7 @@ integrand(el1, el2) = sum(abs2, el1 - el2)
 
 function redo(p,nom_prob)
     prob = remake(nom_prob; p=p)
-    sol = solve(prob, alg())
+    sol = solve(prob, alg(),reltol=1e-8,abstol=1e-8)
     return prob,sol
 end
 
