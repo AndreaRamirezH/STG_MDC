@@ -1,5 +1,5 @@
 using OrdinaryDiffEq, ModelingToolkit, MinimallyDisruptiveCurves, Plots, DiffEqParamEstim, DiffEqSensitivity
-using NumericalIntegration, LinearAlgebra, ForwardDiff
+using NumericalIntegration, LinearAlgebra, ForwardDiff, FiniteDiff
 
 const D_noise = 0.01
 const VNa = 50
@@ -124,58 +124,34 @@ end
 alg = Rodas5
 solve = OrdinaryDiffEq.solve
 
-od,ic,_ , ps = Neuron_wHomeo_dynamics(t->0.);
-tspan = (0,800.);
-#tsteps = 0.:10.:800;
+# Cost function
 
-nom_prob = ODEProblem(od,ic,tspan,ps)
+t0 = 400.; tf = 800.
 
-#log transform
-tstrct_log = logabs_transform(last.(ps))
-od, ic, ps = transform_problem(nom_prob, tstrct_log; unames=first.(ic), pnames = first.(ps))
-prob_transf = ODEProblem(od,ic,tspan,ps);
-p0 = last.(ps)
+integrand(el1, el2) = sum(abs2, el1 - el2)
 
-nom_sol = solve(prob, alg())
+function redo(p,nom_prob)
+    prob = remake(nom_prob; p=p)
+    sol = solve(prob, alg())
+    return prob,sol
+end
 
-## Cost function
+function loss2(p,nom_prob,nom_ca)
+  prob,sol = redo(p,nom_prob)
+  new_t0_idx = findfirst(t-> t>t0, sol.t)
+  ca_sol = sol[2,new_t0_idx:end]
+  m = min(length(ca_sol),length(nom_ca)) #take same size ca trace in sol and nom_sol
+  x = sol.t[end-m:end]
+  y = abs2.(nom_sol[2,end-m:end] .- sol[2,end-m:end])
+  loss2 = NumericalIntegration.integrate(x,y)
+  return loss2
+end
 
-# t0 = 400.; tf = 800.
-# tsteps_from_t0 = filter(t-> t>t0, nom_sol.t)
-# t0_idx = findfirst(t-> t>t0, nom_sol.t)
-# nom_ca = nom_sol[2,t0_idx:end];
-#
-# integrand(el1, el2) = sum(abs2, el1 - el2)
-# #integrate = NumericalIntegration.integrate
-#
-# function redo(p)
-#     prob = remake(nom_prob; p=p)
-#     sol = solve(prob, alg())
-#     return prob,sol
-# end
-#
-# function loss2(p)
-#   prob,sol = redo(p)
-#   new_t0_idx = findfirst(t-> t>t0, sol.t)
-#   ca_sol = sol[2,new_t0_idx:end]
-#   m = min(length(ca_sol),length(nom_ca)) #take same size ca trace in sol and nom_sol
-#   x = sol.t[end-m:end]
-#   y = abs2.(nom_sol[2,end-m:end] .- sol[2,end-m:end])
-#   loss2 = integrate(x,y)
-#   return loss2
-# end
-#
-# loss2(p0) #OK
-#
-# function lossgrad(p,g)
-#   g[:] = ForwardDiff.gradient(p) do p
-#     loss2(p)
-#   end
-#   return loss2(p)
-# end
-#
-# grad_template = deepcopy(p0)
-# lossgrad(p0,grad_template)
-#
-# cost_created = DiffCost(loss2, lossgrad);
-# cost_created(p0)
+loss(p)=loss2(p,nom_prob,nom_ca)
+
+function lossgrad(p,g)
+  g[:] = ForwardDiff.gradient(p) do p
+    loss(p)
+  end
+  return loss(p)
+end
