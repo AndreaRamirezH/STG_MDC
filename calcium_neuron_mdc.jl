@@ -126,16 +126,12 @@ solve = OrdinaryDiffEq.solve
 
 # Cost function
 
-t0 = 400.; tf = 800.
-
-#integrand(el1, el2) = sum(abs2, el1 - el2)
-
-function redo(p,nom_prob)
+function redo(p,nom_prob,nom_sol)
     prob = remake(nom_prob; p=p)
-    sol = solve(prob, alg(),reltol=1e-8,abstol=1e-8)
+    sol = solve(prob, alg(),saveat = nom_sol.t,reltol=1e-8,abstol=1e-8)
     return prob,sol
 end
-
+#=
 function loss2(p,nom_prob,nom_sol)
   prob,sol = redo(p,nom_prob)
   loss2 = quadgk(t-> abs2(nom_sol(t)[2] - sol(t)[2]),t0,tf)[1]
@@ -150,3 +146,5 @@ function lossgrad(p,g)
   end
   return loss(p)
 end
+=#
+loss_from_sol(sol) = quadgk(t-> abs2(nom_sol(t)[2] - sol(t)[2]),t0,tf)[1]
